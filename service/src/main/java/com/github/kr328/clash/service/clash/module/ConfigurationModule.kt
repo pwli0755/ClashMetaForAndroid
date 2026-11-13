@@ -4,7 +4,10 @@ import android.app.Service
 import com.github.kr328.clash.common.constants.Intents
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.core.Clash
+import com.github.kr328.clash.service.util.configureTailnet
+import com.github.kr328.clash.service.util.RuntimeProfiles
 import com.github.kr328.clash.service.StatusProvider
+import com.github.kr328.clash.service.ProfileProcessor
 import com.github.kr328.clash.service.data.ImportedDao
 import com.github.kr328.clash.service.data.SelectionDao
 import com.github.kr328.clash.service.store.ServiceStore
@@ -18,6 +21,7 @@ class ConfigurationModule(service: Service) : Module<ConfigurationModule.LoadExc
     data class LoadException(val message: String)
 
     private val store = ServiceStore(service)
+    private val runtimeProfiles = RuntimeProfiles(service.filesDir.resolve("runtime-profiles"))
     private val reload = Channel<Unit>(Channel.CONFLATED)
 
     override suspend fun run() {
@@ -50,14 +54,18 @@ class ConfigurationModule(service: Service) : Module<ConfigurationModule.LoadExc
                 if (current == loaded && changed != null && changed != loaded)
                     continue
 
-                loaded = current
+                service.configureTailnet()
 
                 val active = ImportedDao().queryByUUID(current)
                     ?: throw NullPointerException("No profile selected")
 
                 Clash.setAgeSecretKey(active.ageSecretKey?.takeIf { it.isNotBlank() })
 
-                Clash.load(service.importedDir.resolve(active.uuid.toString())).await()
+                ProfileProcessor.withProfileFiles {
+                    runtimeProfiles.activate(service.importedDir.resolve(active.uuid.toString()), active.uuid, active.name, active.ageSecretKey) {
+                        Clash.load(it).await()
+                    }
+                }
 
                 val remove = SelectionDao().querySelections(active.uuid)
                     .filterNot { Clash.patchSelector(it.proxy, it.selected) }
@@ -65,13 +73,32 @@ class ConfigurationModule(service: Service) : Module<ConfigurationModule.LoadExc
 
                 SelectionDao().removeSelections(active.uuid, remove)
 
+                loaded = current
                 StatusProvider.currentProfile = active.name
 
                 service.sendProfileLoaded(current)
 
                 Log.d("Profile ${active.name} loaded")
             } catch (e: Exception) {
-                return enqueueEvent(LoadException(e.message ?: "Unknown"))
+                if (loaded == null) {
+                    val previous = runtimeProfiles.current()
+                    if (previous == null) return enqueueEvent(LoadException(e.message ?: "Unknown"))
+                    try {
+                        Clash.setAgeSecretKey(previous.secret)
+                        Clash.load(previous.directory).await()
+                        loaded = previous.uuid
+                        store.activeProfile = previous.uuid
+                        StatusProvider.currentProfile = previous.name
+                        service.sendProfileLoaded(previous.uuid)
+                    } catch (fallback: Exception) {
+                        return enqueueEvent(LoadException("${e.message}; recovery failed: ${fallback.message}"))
+                    }
+                } else if (store.activeProfile != loaded) {
+                    // Keep selection and the running generation consistent after a rejected switch.
+                    store.activeProfile = loaded
+                    service.sendProfileLoaded(loaded)
+                }
+                Log.w("Configuration rejected; previous connection retained: ${e.message}")
             }
         }
     }

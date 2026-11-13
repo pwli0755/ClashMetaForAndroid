@@ -9,6 +9,7 @@ import (
 	"github.com/dlclark/regexp2"
 
 	"cfa/native/common"
+	"cfa/native/tailnet"
 
 	"github.com/metacubex/mihomo/common/utils"
 	"github.com/metacubex/mihomo/config"
@@ -26,6 +27,7 @@ var processors = []processor{
 	patchListeners,
 	patchProviders,
 	validConfig,
+	func(cfg *config.RawConfig, _ string) error { return tailnet.Patch(cfg) },
 }
 
 type processor func(cfg *config.RawConfig, profileDir string) error

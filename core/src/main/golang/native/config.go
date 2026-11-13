@@ -8,6 +8,7 @@ import (
 	"unsafe"
 
 	"cfa/native/config"
+	"cfa/native/tailnet"
 )
 
 type remoteValidCallback struct {
@@ -124,3 +125,14 @@ func verityPublicKeys(publicKeys C.c_string) C.int {
 
 	return 1
 }
+
+//export configureTailnet
+func configureTailnet(content C.c_string) *C.char {
+	if err := tailnet.Configure(C.GoString(content)); err != nil {
+		return C.CString(err.Error())
+	}
+	return C.CString("")
+}
+
+//export tailnetCommand
+func tailnetCommand(action C.c_string) *C.char { return C.CString(tailnet.Command(C.GoString(action))) }

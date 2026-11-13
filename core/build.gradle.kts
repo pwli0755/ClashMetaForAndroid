@@ -9,6 +9,11 @@ plugins {
     id("golang-android")
 }
 
+// Keep the small CMFA API extensions reproducible without a private mihomo fork.
+exec {
+    commandLine("sh", file("mihomo-patches/apply.sh").absolutePath)
+}
+
 val golangSource = file("src/main/golang/native")
 
 golang {

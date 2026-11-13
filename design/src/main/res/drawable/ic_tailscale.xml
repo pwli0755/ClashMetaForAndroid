@@ -1,0 +1,14 @@
+<!-- Tailscale mark adapted from tailscale/tailscale-android, android/src/main/res/drawable/ic_launcher_foreground.xml -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="39" android:viewportHeight="39" android:tint="?attr/colorControlNormal">
+    <group android:translateX="-34.5" android:translateY="-34.5">
+        <path android:pathData="M34.5,39.37a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" android:fillAlpha="0.4" />
+        <path android:pathData="M49.13,39.37a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" android:fillAlpha="0.4" />
+        <path android:pathData="M63.75,39.37a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" android:fillAlpha="0.4" />
+        <path android:pathData="M34.5,54a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" />
+        <path android:pathData="M49.13,54a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" />
+        <path android:pathData="M63.75,54a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" />
+        <path android:pathData="M34.5,68.62a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" android:fillAlpha="0.4" />
+        <path android:pathData="M49.13,68.62a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" />
+        <path android:pathData="M63.75,68.62a4.87,4.88 0,1 0,9.75 0a4.87,4.88 0,1 0,-9.75 0z" android:fillColor="#ffffff" android:fillAlpha="0.4" />
+    </group>
+</vector>

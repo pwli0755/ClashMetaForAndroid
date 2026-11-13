@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"cfa/native/app"
+	"cfa/native/tailnet"
 
 	"github.com/metacubex/mihomo/common/yaml"
 	"github.com/metacubex/mihomo/config"
@@ -58,7 +59,8 @@ func Parse(rawConfig *config.RawConfig) (*config.Config, error) {
 	return cfg, nil
 }
 
-func Load(path string) error {
+func Load(path string) (err error) {
+	defer func() { tailnet.ConfigError(err) }()
 	rawCfg, err := UnmarshalAndPatch(path)
 	if err != nil {
 		log.Errorln("Load %s: %s", path, err.Error())

@@ -5,6 +5,7 @@ import android.net.VpnService
 import android.os.Build
 import androidx.core.content.getSystemService
 import com.github.kr328.clash.core.Clash
+import com.github.kr328.clash.service.util.tailnetProxyPermitted
 import com.github.kr328.clash.core.util.parseInetSocketAddress
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
@@ -32,8 +33,14 @@ class TunModule(private val vpn: VpnService) : Module<Unit>(vpn) {
         if (Build.VERSION.SDK_INT < 29)
             return -1
 
-        return runCatching { connectivity.getConnectionOwnerUid(protocol, source, target) }
-            .getOrElse { -1 }
+        return runCatching {
+            val uid = connectivity.getConnectionOwnerUid(protocol, source, target)
+            val allowed = service.tailnetProxyPermitted(uid)
+            if (allowed) uid else -1
+        }
+            .getOrElse {
+                -1
+            }
     }
 
     override suspend fun run() {

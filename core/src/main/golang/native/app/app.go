@@ -3,11 +3,13 @@ package app
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 var appVersionName string
 var platformVersion int
+var appsMu sync.RWMutex
 var installedAppsUid = map[int]string{}
 
 func ApplyVersionName(versionName string) {
@@ -41,10 +43,14 @@ func NotifyInstallAppsChanged(uidList string) {
 		}
 	}
 
+	appsMu.Lock()
 	installedAppsUid = uids
+	appsMu.Unlock()
 }
 
 func QueryAppByUid(uid int) string {
+	appsMu.RLock()
+	defer appsMu.RUnlock()
 	return installedAppsUid[uid]
 }
 

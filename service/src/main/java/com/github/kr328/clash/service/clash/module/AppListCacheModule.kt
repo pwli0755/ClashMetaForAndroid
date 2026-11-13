@@ -5,9 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.core.Clash
+import com.github.kr328.clash.service.util.configureTailnet
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
-import java.util.concurrent.TimeUnit
 
 class AppListCacheModule(service: Service) : Module<Unit>(service) {
     private fun PackageInfo.uniqueUidName(): String =
@@ -30,6 +29,7 @@ class AppListCacheModule(service: Service) : Module<Unit>(service) {
                 }
             }
 
+        service.configureTailnet()
         Clash.notifyInstalledAppsChanged(packages)
 
         Log.d("Installed ${packages.size} packages cached")
@@ -46,8 +46,6 @@ class AppListCacheModule(service: Service) : Module<Unit>(service) {
             reload()
 
             packageChanged.receive()
-
-            delay(TimeUnit.SECONDS.toMillis(10))
         }
     }
 }

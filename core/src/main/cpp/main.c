@@ -609,3 +609,17 @@ Java_com_github_kr328_clash_core_bridge_Bridge_nativeCoreVersion(JNIEnv *env, jo
 
     return new_string(Version);
 }
+
+JNIEXPORT jstring JNICALL
+Java_com_github_kr328_clash_core_bridge_Bridge_nativeConfigureTailnet(JNIEnv *env, jobject thiz, jstring content) {
+    scoped_string input = get_string(content);
+    scoped_string result = configureTailnet(input);
+    return new_string(result);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_github_kr328_clash_core_bridge_Bridge_nativeTailnetCommand(JNIEnv *env, jobject thiz, jstring action) {
+    scoped_string input = get_string(action);
+    scoped_string result = tailnetCommand(input);
+    return new_string(result);
+}

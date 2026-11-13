@@ -9,10 +9,12 @@ import android.os.Build
 import com.github.kr328.clash.common.compat.pendingIntentFlags
 import com.github.kr328.clash.common.constants.Components
 import com.github.kr328.clash.common.log.Log
+import com.github.kr328.clash.core.bridge.Bridge
 import com.github.kr328.clash.service.clash.clashRuntime
 import com.github.kr328.clash.service.clash.module.*
 import com.github.kr328.clash.service.model.AccessControlMode
 import com.github.kr328.clash.service.store.ServiceStore
+import com.github.kr328.clash.service.util.configureTailnet
 import com.github.kr328.clash.service.util.cancelAndJoinBlocking
 import com.github.kr328.clash.service.util.parseCIDR
 import com.github.kr328.clash.service.util.sendClashStarted
@@ -57,6 +59,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
                         true
                     }
                     network.onEvent { n ->
+                        launch { Bridge.nativeTailnetCommand("network") }
                         if (Build.VERSION.SDK_INT in 22..28) @TargetApi(22) {
                             setUnderlyingNetworks(n?.let { arrayOf(it) })
                         }
@@ -123,19 +126,21 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
     private fun TunModule.open() {
         val store = ServiceStore(self)
 
+        self.configureTailnet()
+        val ipv6 = store.allowIpv6 || store.tailnetEnabled
         val device = with(Builder()) {
             // Interface address
             addAddress(TUN_GATEWAY, TUN_SUBNET_PREFIX)
-            if (store.allowIpv6) {
+            if (ipv6) {
                 addAddress(TUN_GATEWAY6, TUN_SUBNET_PREFIX6)
             }
 
             // Route
-            if (store.bypassPrivateNetwork) {
+            if (store.bypassPrivateNetwork && !store.tailnetEnabled) {
                 resources.getStringArray(R.array.bypass_private_route).map(::parseCIDR).forEach {
                     addRoute(it.ip, it.prefix)
                 }
-                if (store.allowIpv6) {
+                if (ipv6) {
                     resources.getStringArray(R.array.bypass_private_route6).map(::parseCIDR).forEach {
                         addRoute(it.ip, it.prefix)
                     }
@@ -143,18 +148,18 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
 
                 // Route of virtual DNS
                 addRoute(TUN_DNS, 32)
-                if (store.allowIpv6) {
+                if (ipv6) {
                     addRoute(TUN_DNS6, 128)
                 }
             } else {
                 addRoute(NET_ANY, 0)
-                if (store.allowIpv6) {
+                if (ipv6) {
                     addRoute(NET_ANY6, 0)
                 }
             }
 
             // Access Control
-            when (store.accessControlMode) {
+            when (if (store.tailnetEnabled) AccessControlMode.AcceptAll else store.accessControlMode) {
                 AccessControlMode.AcceptAll -> Unit
                 AccessControlMode.AcceptSelected -> {
                     (store.accessControlPackages + packageName).forEach {
@@ -179,7 +184,7 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
 
             // Virtual Dns Server
             addDnsServer(TUN_DNS)
-            if (store.allowIpv6) {
+            if (ipv6) {
                 addDnsServer(TUN_DNS6)
             }
 
@@ -199,19 +204,19 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
             }
 
             // System Proxy
-            if (Build.VERSION.SDK_INT >= 29 && store.systemProxy) {
+            if (Build.VERSION.SDK_INT >= 29 && store.systemProxy && !store.tailnetEnabled) {
                 listenHttp()?.let {
                     setHttpProxy(
                         ProxyInfo.buildDirectProxy(
                             it.address.hostAddress,
                             it.port,
-                            HTTP_PROXY_BLACK_LIST + if (store.bypassPrivateNetwork) HTTP_PROXY_LOCAL_LIST else emptyList()
+                            HTTP_PROXY_BLACK_LIST + if (store.bypassPrivateNetwork && !store.tailnetEnabled) HTTP_PROXY_LOCAL_LIST else emptyList()
                         )
                     )
                 }
             }
 
-            if (store.allowBypass) {
+            if (store.allowBypass && !store.tailnetEnabled) {
                 allowBypass()
             }
 
@@ -219,9 +224,9 @@ class TunService : VpnService(), CoroutineScope by CoroutineScope(Dispatchers.De
                 fd = establish()?.detachFd()
                     ?: throw NullPointerException("Establish VPN rejected by system"),
                 stack = store.tunStackMode,
-                gateway = "$TUN_GATEWAY/$TUN_SUBNET_PREFIX" + if (store.allowIpv6) ",$TUN_GATEWAY6/$TUN_SUBNET_PREFIX6" else "",
-                portal = TUN_PORTAL + if (store.allowIpv6) ",$TUN_PORTAL6" else "",
-                dns = if (store.dnsHijacking) NET_ANY else (TUN_DNS + if (store.allowIpv6) ",$TUN_DNS6" else ""),
+                gateway = "$TUN_GATEWAY/$TUN_SUBNET_PREFIX" + if (ipv6) ",$TUN_GATEWAY6/$TUN_SUBNET_PREFIX6" else "",
+                portal = TUN_PORTAL + if (ipv6) ",$TUN_PORTAL6" else "",
+                dns = if (store.dnsHijacking || store.tailnetEnabled) NET_ANY else (TUN_DNS + if (ipv6) ",$TUN_DNS6" else ""),
             )
         }
 

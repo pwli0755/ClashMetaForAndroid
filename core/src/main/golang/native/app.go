@@ -8,6 +8,8 @@ import (
 	"unsafe"
 
 	"cfa/native/app"
+	"cfa/native/tailnet"
+	"cfa/native/tunnel"
 
 	"github.com/metacubex/mihomo/log"
 )
@@ -41,13 +43,15 @@ func notifyInstalledAppsChanged(uids C.c_string) {
 	u := C.GoString(uids)
 
 	app.NotifyInstallAppsChanged(u)
+	if tailnet.Enabled() {
+		tunnel.CloseAllConnections()
+	}
 }
 
 //export notifyTimeZoneChanged
 func notifyTimeZoneChanged(name C.c_string, offset C.int) {
 	app.NotifyTimeZoneChanged(C.GoString(name), int(offset))
 }
-
 
 //export queryConfiguration
 func queryConfiguration() *C.char {

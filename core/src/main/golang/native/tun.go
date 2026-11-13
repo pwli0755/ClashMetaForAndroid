@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"cfa/native/app"
+	"cfa/native/tailnet"
 	"cfa/native/tun"
 )
 
@@ -93,12 +94,14 @@ func startTun(fd C.int, stack, gateway, portal, dns C.c_string, callback unsafe.
 	remote.closer = closer
 
 	rTun = remote
+	tailnet.SetReady(true)
 
 	return 0
 }
 
 //export stopTun
 func stopTun() {
+	tailnet.SetReady(false)
 	rTunLock.Lock()
 	defer rTunLock.Unlock()
 

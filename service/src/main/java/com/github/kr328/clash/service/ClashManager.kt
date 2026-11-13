@@ -3,6 +3,8 @@ package com.github.kr328.clash.service
 import android.content.Context
 import com.github.kr328.clash.common.log.Log
 import com.github.kr328.clash.core.Clash
+import com.github.kr328.clash.core.bridge.Bridge
+import com.github.kr328.clash.service.util.configureTailnet
 import com.github.kr328.clash.core.model.*
 import com.github.kr328.clash.service.data.Selection
 import com.github.kr328.clash.service.data.SelectionDao
@@ -17,6 +19,12 @@ class ClashManager(private val context: Context) : IClashManager,
     CoroutineScope by CoroutineScope(Dispatchers.IO) {
     private val store = ServiceStore(context)
     private var logReceiver: ReceiveChannel<LogMessage>? = null
+
+    override suspend fun tailnetCommand(action: String): String = withContext(Dispatchers.IO) {
+        require(action in setOf("status", "login", "logout", "retry"))
+        context.configureTailnet()
+        Bridge.nativeTailnetCommand(action)
+    }
 
     override fun queryTunnelState(): TunnelState {
         return Clash.queryTunnelState()

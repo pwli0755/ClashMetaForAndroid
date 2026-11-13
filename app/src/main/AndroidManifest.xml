@@ -29,6 +29,7 @@
         android:allowBackup="true"
         android:banner="@mipmap/ic_banner"
         android:fullBackupContent="@xml/full_backup_content"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/application_name"
         android:localeConfig="@xml/locales_config"
@@ -172,6 +173,7 @@
             android:configChanges="uiMode"
             android:exported="false"
             android:label="@string/meta_features" />
+        <activity android:name=".TailnetActivity" android:exported="false" android:label="@string/tailnet_title" />
         <activity
             android:name=".AccessControlActivity"
             android:configChanges="uiMode"

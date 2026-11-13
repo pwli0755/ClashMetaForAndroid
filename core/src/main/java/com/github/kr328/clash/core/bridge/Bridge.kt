@@ -10,6 +10,8 @@ import java.io.File
 
 @Keep
 object Bridge {
+    external fun nativeConfigureTailnet(content: String): String
+    external fun nativeTailnetCommand(action: String): String
     external fun nativeReset()
     external fun nativeForceGc()
     external fun nativeSuspend(suspend: Boolean)

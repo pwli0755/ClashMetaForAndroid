@@ -2,3 +2,6 @@
 
 *.bat text eol=crlf
 *.jar binary
+
+# Preserve diff prefixes in the bundled mihomo patch.
+/core/mihomo-patches/*.patch -whitespace

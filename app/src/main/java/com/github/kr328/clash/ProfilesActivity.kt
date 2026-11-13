@@ -32,7 +32,7 @@ class ProfilesActivity : BaseActivity<ProfilesDesign>() {
             select<Unit> {
                 events.onReceive {
                     when (it) {
-                        Event.ActivityStart, Event.ProfileChanged -> {
+                        Event.ActivityStart, Event.ProfileChanged, Event.ProfileLoaded -> {
                             design.fetch()
                         }
                         else -> Unit

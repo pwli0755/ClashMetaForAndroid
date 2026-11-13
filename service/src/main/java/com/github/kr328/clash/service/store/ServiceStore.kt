@@ -14,6 +14,10 @@ class ServiceStore(context: Context) {
             .asStoreProvider()
     )
 
+    var tailnetEnabled by store.boolean("tailnet_enabled", false)
+    var tailnetHostname by store.string("tailnet_hostname", "cmfa-android")
+    var tailnetAcceptRoutes by store.boolean("tailnet_accept_routes", false)
+
     var activeProfile: UUID? by store.typedString(
         key = "active_profile",
         from = { if (it.isBlank()) null else UUID.fromString(it) },

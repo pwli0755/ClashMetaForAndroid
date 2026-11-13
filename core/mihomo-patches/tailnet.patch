@@ -1,0 +1,278 @@
+diff --git a/adapter/outbound/reject.go b/adapter/outbound/reject.go
+index 79dd0586..c5134135 100644
+--- a/adapter/outbound/reject.go
++++ b/adapter/outbound/reject.go
+@@ -105,14 +105,17 @@ func (rw nopConn) Read(b []byte) (int, error) { return 0, io.EOF }
+ 
+ func (rw nopConn) ReadBuffer(buffer *buf.Buffer) error { return io.EOF }
+ 
+-func (rw nopConn) Write(b []byte) (int, error)          { return 0, io.EOF }
+-func (rw nopConn) WriteBuffer(buffer *buf.Buffer) error { return io.EOF }
+-func (rw nopConn) Close() error                         { return nil }
+-func (rw nopConn) LocalAddr() net.Addr                  { return nil }
+-func (rw nopConn) RemoteAddr() net.Addr                 { return nil }
+-func (rw nopConn) SetDeadline(time.Time) error          { return nil }
+-func (rw nopConn) SetReadDeadline(time.Time) error      { return nil }
+-func (rw nopConn) SetWriteDeadline(time.Time) error     { return nil }
++func (rw nopConn) Write(b []byte) (int, error) { return 0, io.EOF }
++func (rw nopConn) WriteBuffer(buffer *buf.Buffer) error {
++	buffer.Release()
++	return io.EOF
++}
++func (rw nopConn) Close() error                     { return nil }
++func (rw nopConn) LocalAddr() net.Addr              { return nil }
++func (rw nopConn) RemoteAddr() net.Addr             { return nil }
++func (rw nopConn) SetDeadline(time.Time) error      { return nil }
++func (rw nopConn) SetReadDeadline(time.Time) error  { return nil }
++func (rw nopConn) SetWriteDeadline(time.Time) error { return nil }
+ 
+ var udpAddrIPv4Unspecified = &net.UDPAddr{IP: net.IPv4zero, Port: 0}
+ 
+@@ -140,11 +143,14 @@ func (rw dropConn) ReadBuffer(buffer *buf.Buffer) error {
+ 	time.Sleep(C.DefaultDropTime)
+ 	return io.EOF
+ }
+-func (rw dropConn) Write(b []byte) (int, error)          { return 0, io.EOF }
+-func (rw dropConn) WriteBuffer(buffer *buf.Buffer) error { return io.EOF }
+-func (rw dropConn) Close() error                         { return nil }
+-func (rw dropConn) LocalAddr() net.Addr                  { return nil }
+-func (rw dropConn) RemoteAddr() net.Addr                 { return nil }
+-func (rw dropConn) SetDeadline(time.Time) error          { return nil }
+-func (rw dropConn) SetReadDeadline(time.Time) error      { return nil }
+-func (rw dropConn) SetWriteDeadline(time.Time) error     { return nil }
++func (rw dropConn) Write(b []byte) (int, error) { return 0, io.EOF }
++func (rw dropConn) WriteBuffer(buffer *buf.Buffer) error {
++	buffer.Release()
++	return io.EOF
++}
++func (rw dropConn) Close() error                     { return nil }
++func (rw dropConn) LocalAddr() net.Addr              { return nil }
++func (rw dropConn) RemoteAddr() net.Addr             { return nil }
++func (rw dropConn) SetDeadline(time.Time) error      { return nil }
++func (rw dropConn) SetReadDeadline(time.Time) error  { return nil }
++func (rw dropConn) SetWriteDeadline(time.Time) error { return nil }
+diff --git a/dns/middleware.go b/dns/middleware.go
+index fa6cb68b..3b45a1bf 100644
+--- a/dns/middleware.go
++++ b/dns/middleware.go
+@@ -245,5 +245,5 @@ func newHandler(resolver resolver.Resolver, mapper *ResolverEnhancer) handler {
+ 		middlewares = append(middlewares, withMapping(mapper.mapping))
+ 	}
+ 
+-	return compose(middlewares, withResolver(resolver, mapper.ipv6))
++	return withManagedTailnet(compose(middlewares, withResolver(resolver, mapper.ipv6)))
+ }
+diff --git a/tunnel/tunnel.go b/tunnel/tunnel.go
+index 86dbc14a..506d9e03 100644
+--- a/tunnel/tunnel.go
++++ b/tunnel/tunnel.go
+@@ -315,7 +315,10 @@ func preHandleMetadata(metadata *C.Metadata) error {
+ }
+ 
+ func resolveMetadata(metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err error) {
+-	if metadata.SpecialProxy != "" {
++	if managed := applyAppPolicy(metadata); managed != nil {
++		return managed, nil, nil
++	}
++	if !hasAppPolicy() && metadata.SpecialProxy != "" {
+ 		var exist bool
+ 		proxy, exist = proxies[metadata.SpecialProxy]
+ 		if !exist {
+@@ -398,6 +401,9 @@ func resolveMetadata(metadata *C.Metadata) (proxy C.Proxy, rule C.Rule, err erro
+ 		helper.FindProcess = nil
+ 	}
+ 
++	if hasAppPolicy() {
++		return match(metadata, helper)
++	}
+ 	switch mode {
+ 	case Direct:
+ 		proxy = proxies["DIRECT"]
+diff --git a/adapter/outbound/tailscale_cmfa.go b/adapter/outbound/tailscale_cmfa.go
+new file mode 100644
+index 00000000..952df5fc
+--- /dev/null
++++ b/adapter/outbound/tailscale_cmfa.go
+@@ -0,0 +1,32 @@
++//go:build cmfa && with_gvisor && !no_tailscale
++
++package outbound
++
++import (
++	"context"
++	"github.com/metacubex/tailscale/client/local"
++	D "github.com/miekg/dns"
++)
++
++// NewManagedTailscale keeps authentication URLs out of the application's log stream.
++func NewManagedTailscale(option TailscaleOption) (*Tailscale, error) {
++	t, err := NewTailscale(option)
++	if err != nil {
++		return nil, err
++	}
++	t.server.UserLogf = func(string, ...any) {}
++	t.server.Logf = func(string, ...any) {}
++	return t, nil
++}
++
++// ManagedClient exposes the embedded instance, never a machine-wide LocalAPI socket.
++func (t *Tailscale) ManagedClient() (*local.Client, error) {
++	if err := t.start(); err != nil {
++		return nil, err
++	}
++	return t.server.LocalClient()
++}
++
++func (t *Tailscale) ManagedDNS(ctx context.Context, msg *D.Msg) (*D.Msg, error) {
++	return (tailscaleDNSTransport{tailscale: t}).ExchangeContext(ctx, msg)
++}
+diff --git a/adapter/outbound/reject_buffer_test.go b/adapter/outbound/reject_buffer_test.go
+new file mode 100644
+index 00000000..5d80ab51
+--- /dev/null
++++ b/adapter/outbound/reject_buffer_test.go
+@@ -0,0 +1,25 @@
++package outbound
++
++import (
++	"github.com/metacubex/mihomo/common/buf"
++	"io"
++	"testing"
++)
++
++func TestRejectWritersReleaseOwnedBuffers(t *testing.T) {
++	for _, tc := range []struct {
++		name  string
++		write func(*buf.Buffer) error
++	}{
++		{"reject", (nopConn{}).WriteBuffer}, {"reject-drop", (dropConn{}).WriteBuffer},
++	} {
++		t.Run(tc.name, func(t *testing.T) {
++			buffer := buf.New()
++			_, _ = buffer.Write([]byte("request"))
++			if err := tc.write(buffer); err != io.EOF {
++				t.Fatalf("unexpected error: %v", err)
++			}
++			buffer.Leak() // debug builds panic here if the writer failed to release ownership
++		})
++	}
++}
+diff --git a/dns/cmfa_tailnet.go b/dns/cmfa_tailnet.go
+new file mode 100644
+index 00000000..1b5cd314
+--- /dev/null
++++ b/dns/cmfa_tailnet.go
+@@ -0,0 +1,35 @@
++package dns
++
++import (
++	"context"
++	icontext "github.com/metacubex/mihomo/context"
++	D "github.com/miekg/dns"
++	"strings"
++	"sync/atomic"
++)
++
++var managedTailnet atomic.Pointer[string]
++
++type ManagedTailnetQuery func(context.Context, *D.Msg) (*D.Msg, error)
++
++var managedQuery atomic.Pointer[ManagedTailnetQuery]
++
++func SetManagedTailnetQuery(query ManagedTailnetQuery) { managedQuery.Store(&query) }
++
++// SetManagedTailnet reserves MagicDNS before hosts, fake-IP and resolver caches.
++func SetManagedTailnet(name string) { managedTailnet.Store(&name) }
++func withManagedTailnet(next handler) handler {
++	return func(ctx *icontext.DNSContext, request *D.Msg) (*D.Msg, error) {
++		name := managedTailnet.Load()
++		if name != nil && *name != "" && len(request.Question) > 0 {
++			host := strings.TrimSuffix(strings.ToLower(request.Question[0].Name), ".")
++			if host == "ts.net" || strings.HasSuffix(host, ".ts.net") {
++				if query := managedQuery.Load(); query != nil && *query != nil {
++					return (*query)(ctx, request)
++				}
++				return newTailscaleClient(*name).ExchangeContext(ctx, request)
++			}
++		}
++		return next(ctx, request)
++	}
++}
+diff --git a/dns/cmfa_tailnet_test.go b/dns/cmfa_tailnet_test.go
+new file mode 100644
+index 00000000..9b55e703
+--- /dev/null
++++ b/dns/cmfa_tailnet_test.go
+@@ -0,0 +1,44 @@
++package dns
++
++import (
++	"context"
++	"errors"
++	icontext "github.com/metacubex/mihomo/context"
++	D "github.com/miekg/dns"
++	"testing"
++)
++
++type guardedTestDNS struct{ calls int }
++
++func (c *guardedTestDNS) Address() string  { return "test" }
++func (c *guardedTestDNS) ResetConnection() {}
++func (c *guardedTestDNS) ExchangeContext(_ context.Context, _ *D.Msg) (*D.Msg, error) {
++	c.calls++
++	return nil, errors.New("offline")
++}
++
++func TestManagedTailnetDoesNotFallback(t *testing.T) {
++	client := &guardedTestDNS{}
++	unregister := RegisterTailscaleDnsClient("test-cmfa", client)
++	defer unregister()
++	SetManagedTailnet("test-cmfa")
++	defer SetManagedTailnet("")
++	fallback := 0
++	handler := withManagedTailnet(func(_ *icontext.DNSContext, m *D.Msg) (*D.Msg, error) { fallback++; return m, nil })
++	for _, qtype := range []uint16{D.TypeA, D.TypeAAAA, D.TypeHTTPS} {
++		msg := new(D.Msg)
++		msg.SetQuestion("host.tail.ts.net.", qtype)
++		_, err := handler(icontext.NewDNSContext(context.Background()), msg)
++		if err == nil || fallback != 0 {
++			t.Fatal("offline Tailnet DNS leaked to normal resolver")
++		}
++	}
++	msg := new(D.Msg)
++	msg.SetQuestion("example.org.", D.TypeA)
++	if _, err := handler(icontext.NewDNSContext(context.Background()), msg); err != nil || fallback != 1 {
++		t.Fatal("public DNS was redirected")
++	}
++	if client.calls != 3 {
++		t.Fatal("Tailnet DNS guard not used")
++	}
++}
+diff --git a/tunnel/cmfa_policy.go b/tunnel/cmfa_policy.go
+new file mode 100644
+index 00000000..e36178f7
+--- /dev/null
++++ b/tunnel/cmfa_policy.go
+@@ -0,0 +1,22 @@
++package tunnel
++
++import (
++	C "github.com/metacubex/mihomo/constant"
++	"sync/atomic"
++)
++
++type AppPolicy func(*C.Metadata) C.Proxy
++
++var appPolicy atomic.Pointer[AppPolicy]
++
++// SetAppPolicy installs CMFA's destination and application boundary before mode
++// or inbound overrides. Returning nil delegates to the subscription's rules.
++func SetAppPolicy(policy AppPolicy) { appPolicy.Store(&policy) }
++func applyAppPolicy(metadata *C.Metadata) C.Proxy {
++	if p := appPolicy.Load(); p != nil && *p != nil {
++		return (*p)(metadata)
++	}
++	return nil
++}
++
++func hasAppPolicy() bool { p := appPolicy.Load(); return p != nil && *p != nil }

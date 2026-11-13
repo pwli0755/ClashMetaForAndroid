@@ -11,6 +11,7 @@ import (
 
 	"cfa/native/app"
 	"cfa/native/platform"
+	"cfa/native/tailnet"
 
 	"github.com/metacubex/mihomo/component/dialer"
 	"github.com/metacubex/mihomo/constant"
@@ -31,6 +32,7 @@ func Init(home, versionName, gitVersion string, platformVersion int) {
 	constant.Version = strings.ToLower(constant.Version)
 	app.ApplyVersionName(versionName)
 	app.ApplyPlatformVersion(platformVersion)
+	tailnet.QueryUID = app.QuerySocketUid
 
 	process.DefaultPackageNameResolver = func(metadata *constant.Metadata) (string, error) {
 		src, dst := metadata.RawSrcAddr, metadata.RawDstAddr
